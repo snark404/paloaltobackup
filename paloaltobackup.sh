@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#Script to backup Palo Alto via API with minimal dependencies.
+#Script to backup Palo Alto via API with minimal dependencies (Curl).
 #See the following for an overview of how to generate the API Key
 #https://knowledgebase.paloaltonetworks.com/KCSArticleDetail?id=kA10g000000Cm7yCAC
 
