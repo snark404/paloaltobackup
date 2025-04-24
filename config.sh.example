@@ -1,0 +1,20 @@
+### Variables ###
+#Number of days to keep configs.
+keepdays=200
+#addresses for mail. The mail command will need to be configured.
+mailto="toaddress@example.com"
+mailfrom="fromaddress@example.com"
+
+###System Behavior ###
+#These should not usually need to be edited.
+#
+#devices.csv is a list of devices, one per line, either IP or hostname, then key.  Example
+#hostname.or.ip,LUFRPTOxfljealsdlgahadlaihflasehflsadhflasdfhlsdhfiaeshdfasdfas==
+devicelist="devices.csv"
+#
+#folder and date for storage
+#date should be unique for every run
+date="$(date +%Y%m%d-%H%M%S)"
+folder="backup"
+logfile="logs/backuplog.log"
+tmplogfile="logs/$date-backuplog.log"
