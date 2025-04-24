@@ -1,41 +1,21 @@
 #!/bin/bash
 
-#Script to backup Palo Alto via API with minimal dependencies (Curl).
+#Script to backup Palo Alto via API.
 #See the following for an overview of how to generate the API Key
 #https://knowledgebase.paloaltonetworks.com/KCSArticleDetail?id=kA10g000000Cm7yCAC
-
-#This script will email a backup result message when completed.
-#It will also log script runs in the logs folder
 
 #This script should email out a success or failure message on every run. 
 #It can be configured to run under cron tab.  Example:  
 #16 5 * * * paloaltobackup cd /home/paloaltobackup;./paloaltobackup.sh >  /dev/null 2>&1
 
-#Setup. Put this script in a folder. Make a folder 'backup', and 'logs' that the script 
-#user will be able to write to.  
+#Setup:
+#Put this script in a folder. Make a folder 'backup', and 'logs' that the script 
+#user will be able to write to. config.sh will hold emails and other private config elements.
+#devices.csv will hold a list of devices and credentials. 
 
 
-###########Required Variables#############
-#devices.csv is a list of devices, one per line, either IP or hostname, then key.  Example
-#hostname.or.ip,LUFRPTOxfljealsdlgahadlaihflasehflsadhflasdfhlsdhfiaeshdfasdfas==
-#Make sure this can only be read by the script user!
-devicelist="devices.csv"
-#Number of days to keep configs.
-keepdays=700
-#addresses for mail. The mail command will need to be configured.
-mailto="to@example.com"
-mailfrom="from@example.com"
-############End Required Variables########
+source config.sh
 
-
-
-
-
-#folder and date for storage
-date="$(date +%Y%m%d-%H%M%S)"
-folder="backup"
-logfile="logs/backuplog.log"
-tmplogfile="logs/$date-backuplog.log"
 
 #Default subject is for failure, override on success
 subject="Palo Backup $date Failed"
@@ -43,20 +23,59 @@ failedrun=false
 while IFS=, read -r device apikey
 do
         file="$folder/$device-$date.xml"
+        tmpfile="$folder/$device-tmp.xml"
+        difffile="$folder/$device-tmp.diff"
         curl -s -k "https://$device/api/?type=config&action=show&key=$apikey" --output $file
 
         if [ ! -f $file ]; then
-                printf "$backup file not created.  Check script or connectivity\n"  | tee -a "$tmplogfile"
+                printf "\n$device backup file not created.  Check script or connectivity\n"  | tee -a "$tmplogfile"
                 failedrun=true
         else
-                if grep -q "response status=\"success\"" "$file";
+                if grep -q "<response status=\"success\"><result>" "$file";
                 then
-                        printf "\n$date $device API call successfull, file $file \n" | tee -a "$tmplogfile"
-                        printf "$date $device File Info " | tee -a "$tmplogfile"
-                        ls -g -o $file  | tee -a "$tmplogfile"
-                        printf "$date $device Zip Info " | tee -a "$tmplogfile"
-                        zip "$file.zip" "$file" | tee -a "$tmplogfile"
-                        rm "$file"
+                        printf "\n$date $device API call successfull \n" | tee -a "$tmplogfile"
+                        #Remove response/result wrapper from the api call
+                        sed -i 's/^<response status="success"><result>//' $file
+                        sed -i 's/<\/result><\/response>$//' $file
+                        #if tmp file exists, log some comparision stats.
+                        #
+                        if [ -f "$tmpfile" ]; then
+
+                                diff -u -s "$tmpfile" "$file" > "$difffile" 
+                                if  grep -q ' are identical' "$difffile" ; then
+                                        echo "No changes"  | tee -a "$tmplogfile"
+                                else
+
+                                        add_lines=$(cat "$difffile" | grep ^+ | wc -l)
+                                        del_lines=$(cat "$difffile" | grep ^- | wc -l)
+
+                                        #Get number of sections by counting lines with @@
+                                        section_lines=$(cat "$difffile" | grep ^@@ | wc -l)
+
+                                        # subtract header lines from count (those starting with +++ & ---) 
+                                        add_lines=$(expr $add_lines - 1)
+                                        del_lines=$(expr $del_lines - 1)
+                                        total_change=$(expr $add_lines + $del_lines)
+
+                                        printf "Added / Deleted / Total Lines / Sections:  " | tee -a "$tmplogfile"
+                                        printf "%3s / " "$add_lines" | tee -a "$tmplogfile"
+                                        printf "%3s / " "$del_lines" | tee -a "$tmplogfile"
+                                        printf "%3s /" "$total_change" | tee -a "$tmplogfile"
+                                        printf "%3s \n " "$section_lines" | tee -a "$tmplogfile"
+                                        zip "$file.zip" "$file" | tee -a "$tmplogfile"
+
+                                fi
+                                #rm "$difffile"
+
+                        else
+                                echo "No file for comparision, Saving new file"
+                                printf "$date $device File Info " | tee -a "$tmplogfile"
+                                ls -g -o $file  | tee -a "$tmplogfile"
+                                printf "$date $device Zip Info " | tee -a "$tmplogfile"
+                                zip "$file.zip" "$file" | tee -a "$tmplogfile"
+                        fi
+                        #Make new temp file that will be used for comparisions next time
+                        mv "$file" "$tmpfile"
                 else
                         printf "$date $device reachable but API Call failed - perhaps invalid API Key?\n" | tee -a "$tmplogfile"
                         failedrun=true
@@ -72,7 +91,7 @@ else
 fi
 
 
-printf "$date $device Removing Old Files\n " | tee -a "$tmplogfile"
+printf "\n$date Removing Zip Files older than $keepdays days old\n" | tee -a "$tmplogfile"
 find -wholename "./$folder/*.zip" -mtime +$keepdays -type f -delete -print | tee -a "$tmplogfile"
 
 #append templogfile to permanent log and the mail/delete the current run logs
