@@ -1,6 +1,8 @@
 ### Variables ###
 #Number of days to keep configs.
 keepdays=200
+#If there are less than x files for a given device don't remove old files
+minfiles=10
 #addresses for mail. The mail command will need to be configured.
 mailto="toaddress@example.com"
 mailfrom="fromaddress@example.com"
