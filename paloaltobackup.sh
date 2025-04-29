@@ -90,9 +90,20 @@ else
         subject="Palo Backup $date Success"
 fi
 
-
-printf "\n$date Removing Zip Files older than $keepdays days old\n" | tee -a "$tmplogfile"
-find -wholename "./$folder/*.zip" -mtime +$keepdays -type f -delete -print | tee -a "$tmplogfile"
+#For each device if files greater than minfiles and older than keepdays delete files
+while IFS=, read -r device apikey
+do
+        file_count=$(find -wholename "./$folder/$device*.zip" -type f -print | wc -l)
+        if [ "$file_count" -gt $minfiles ]; then
+                delete_count=$(find -wholename "./$folder/$device*.zip" -mtime +$keepdays -type f -print | wc -l)
+                if [ "$delete_count" -gt 0 ]; then
+                       printf "\n$date Removing Zip Files older than $keepdays days old for $device\n\n" | tee -a "$tmplogfile"
+                       find -wholename "./$folder/$device*.zip" -mtime +$keepdays -type f -delete -print | tee -a "$tmplogfile"
+                fi
+#       else
+#               printf "\n$date Less than $minfiles files for $device, skipping clean up\n" | tee -a "$tmplogfile"
+        fi
+done < $devicelist
 
 #append templogfile to permanent log and the mail/delete the current run logs
 cat "$tmplogfile" >> "$logfile"
